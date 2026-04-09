@@ -1,21 +1,45 @@
-from langchain.chat_models import ChatOpenAI
-from app.utils.logger import get_logger
-from app.utils.tracer import trace_step
+"""
+Planner Agent — breaks a research query into an ordered plan.
 
-logger = get_logger("PLANNER")
-llm = ChatOpenAI()
+Interview note: Each agent is a plain function (node) that takes ResearchState
+and returns a partial state dict.  LangGraph merges the returned dict into
+the running state automatically — no manual copying required.
+"""
 
-@trace_step("Planner Agent")
-def create_plan(query: str):
-    logger.info(f"Query: {query}")
+import logging
 
-    prompt = f"""
-    Break the task into steps:
-    {query}
-    Include search steps.
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage
+
+from app.state import ResearchState
+
+logger = logging.getLogger(__name__)
+
+_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+SYSTEM_PROMPT = """You are a senior research strategist.
+Given a research query, produce a concise numbered plan (max 5 steps)
+that a research agent should follow to gather comprehensive, accurate information.
+Be specific about what to search for in each step."""
+
+
+def planner_node(state: ResearchState) -> dict:
     """
+    LangGraph node: generates a research plan from the user query.
+    Returns: {'plan': str}
+    """
+    logger.info("[Planner] Building plan for: %s", state["query"])
 
-    plan = llm.predict(prompt)
-    logger.info(f"Plan:\n{plan}")
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=f"Research query: {state['query']}"),
+    ]
 
-    return plan
+    try:
+        response = _llm.invoke(messages)
+        plan = response.content
+        logger.info("[Planner] Plan created (%d chars)", len(plan))
+        return {"plan": plan}
+    except Exception as exc:
+        logger.error("[Planner] Failed: %s", exc)
+        return {"error": f"Planner failed: {exc}"}

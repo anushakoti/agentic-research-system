@@ -1,32 +1,80 @@
-from app.tools.search import search_web
-from app.memory.vector_store import store_docs
-from app.utils.logger import get_logger
-from app.utils.tracer import trace_step
+"""
+Executor Agent — runs web searches according to the plan and stores results.
 
-logger = get_logger("EXECUTOR")
+Interview note: The executor uses LangChain's create_react_agent (ReAct loop)
+so it can decide how many searches to run and when to stop — this is the
+"agentic" part that interviewers look for.  We bind tools explicitly so the
+LLM can call them via tool-use rather than just listing them in a prompt.
+"""
 
-MAX_STEPS = 5
+import logging
+from typing import List
 
-@trace_step("Executor Agent")
-def execute_plan(plan: str):
-    steps = plan.split("\n")
-    collected_data = []
+from langchain_openai import ChatOpenAI
+from langchain.agents import create_react_agent, AgentExecutor
+from langchain_core.prompts import PromptTemplate
 
-    for i, step in enumerate(steps):
-        if i >= MAX_STEPS:
-            break
+from app.state import ResearchState
+from app.tools import web_search, memory_search, store_in_memory
 
-        logger.info(f"Step: {step}")
+logger = logging.getLogger(__name__)
 
-        if "search" in step.lower():
-            try:
-                results = search_web(step)
-                collected_data.extend(results)
-                store_docs(results)
+_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-                logger.info(f"Results: {results[:2]}")
+_TOOLS = [web_search, memory_search]
 
-            except Exception as e:
-                logger.error(f"Error: {e}")
+# ReAct prompt template — must contain {tools}, {tool_names}, {input}, {agent_scratchpad}
+_PROMPT = PromptTemplate.from_template(
+    """You are a thorough research executor. Follow the research plan step-by-step.
+Use the available tools to gather information. Check memory before searching the web.
+Stop once you have enough information to write a comprehensive report.
 
-    return collected_data
+Available tools: {tools}
+Tool names: {tool_names}
+
+Research plan and query:
+{input}
+
+{agent_scratchpad}"""
+)
+
+_agent = create_react_agent(llm=_llm, tools=_TOOLS, prompt=_PROMPT)
+_executor = AgentExecutor(
+    agent=_agent,
+    tools=_TOOLS,
+    max_iterations=8,
+    handle_parsing_errors=True,
+    verbose=False,
+)
+
+
+def executor_node(state: ResearchState) -> dict:
+    """
+    LangGraph node: executes the plan via a ReAct agent and collects results.
+    Returns: {'search_results': List[str]}
+    """
+    if state.get("error"):
+        return {}  # propagate error, skip execution
+
+    plan = state.get("plan", "No plan provided.")
+    query = state["query"]
+
+    logger.info("[Executor] Running ReAct agent for query: %s", query)
+
+    try:
+        result = _executor.invoke(
+            {"input": f"Query: {query}\n\nPlan:\n{plan}"}
+        )
+        raw_output = result.get("output", "")
+
+        # Store gathered info in vector memory for the session
+        search_results: List[str] = [raw_output] if raw_output else []
+        if search_results:
+            store_in_memory(search_results)
+
+        logger.info("[Executor] Collected %d result(s)", len(search_results))
+        return {"search_results": search_results}
+
+    except Exception as exc:
+        logger.error("[Executor] Failed: %s", exc)
+        return {"error": f"Executor failed: {exc}"}

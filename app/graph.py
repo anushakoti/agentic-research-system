@@ -1,38 +1,72 @@
-from langgraph.graph import StateGraph
-from app.state import AgentState
+"""
+LangGraph workflow — wires the four agents into a directed graph.
 
-from app.agents.planner import create_plan
-from app.agents.executor import execute_plan
-from app.agents.writer import generate_report
-from app.agents.reviewer import review_report
+Interview note: Key things to show here:
+  - StateGraph with typed state (not a bare dict)
+  - Conditional edges for error-handling (shows real-world thinking)
+  - LangSmith tracing is enabled via environment variables — zero extra code
+  - The compiled graph is exported so api.py can invoke it cleanly
+"""
 
+import logging
 
-def planner_node(state):
-    return {"plan": create_plan(state["query"])}
+from langgraph.graph import StateGraph, END
 
-def executor_node(state):
-    return {"data": execute_plan(state["plan"])}
+from app.state import ResearchState
+from app.agents import planner_node, executor_node, writer_node, reviewer_node
 
-def writer_node(state):
-    return {"report": generate_report(state["query"], state["data"])}
-
-def reviewer_node(state):
-    return {"reviewed_report": review_report(state["report"])}
+logger = logging.getLogger(__name__)
 
 
-workflow = StateGraph(AgentState)
+# ---------------------------------------------------------------------------
+# Conditional edge: skip to reviewer if an error occurred upstream
+# ---------------------------------------------------------------------------
 
-workflow.add_node("planner", planner_node)
-workflow.add_node("executor", executor_node)
-workflow.add_node("writer", writer_node)
-workflow.add_node("reviewer", reviewer_node)
+def route_after_executor(state: ResearchState) -> str:
+    """
+    If the executor (or planner) set an error, jump straight to the reviewer
+    so the API always gets a response — never a 500.
+    """
+    if state.get("error"):
+        logger.warning("Error detected — routing directly to reviewer.")
+        return "reviewer"
+    return "writer"
 
-workflow.set_entry_point("planner")
 
-workflow.add_edge("planner", "executor")
-workflow.add_edge("executor", "writer")
-workflow.add_edge("writer", "reviewer")
+# ---------------------------------------------------------------------------
+# Build the graph
+# ---------------------------------------------------------------------------
 
-workflow.set_finish_point("reviewer")
+def build_graph() -> StateGraph:
+    workflow = StateGraph(ResearchState)
 
-app = workflow.compile()
+    # Register nodes
+    workflow.add_node("planner", planner_node)
+    workflow.add_node("executor", executor_node)
+    workflow.add_node("writer", writer_node)
+    workflow.add_node("reviewer", reviewer_node)
+
+    # Entry point
+    workflow.set_entry_point("planner")
+
+    # Edges
+    workflow.add_edge("planner", "executor")
+
+    # Conditional: on error skip writer and go straight to reviewer
+    workflow.add_conditional_edges(
+        "executor",
+        route_after_executor,
+        {
+            "writer": "writer",
+            "reviewer": "reviewer",
+        },
+    )
+
+    workflow.add_edge("writer", "reviewer")
+    workflow.add_edge("reviewer", END)
+
+    return workflow
+
+
+# Compile once at import time — reused across all requests
+graph = build_graph().compile()

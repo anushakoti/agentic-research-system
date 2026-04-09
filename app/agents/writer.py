@@ -1,28 +1,65 @@
-from langchain.chat_models import ChatOpenAI
-from app.utils.logger import get_logger
-from app.utils.tracer import trace_step
+"""
+Writer Agent — synthesises search results into a structured draft report.
 
-logger = get_logger("WRITER")
-llm = ChatOpenAI()
+Interview note: The writer uses a simple LLM call (no tool loop needed here)
+with a well-crafted system prompt.  Keeping agents single-responsibility
+is a design principle interviewers love to see.
+"""
 
-@trace_step("Writer Agent")
-def generate_report(query, data):
-    context = "\n".join(data)
+import logging
 
-    prompt = f"""
-    Write a structured report on:
-    {query}
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage
 
-    Data:
-    {context}
+from app.state import ResearchState
 
-    Include:
-    - Introduction
-    - Key Insights
-    - Conclusion
+logger = logging.getLogger(__name__)
+
+_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+
+SYSTEM_PROMPT = """You are an expert research writer.
+Your task is to synthesise raw research findings into a well-structured report.
+
+Report structure:
+1. Executive Summary (2-3 sentences)
+2. Key Findings (bullet points, grouped by theme)
+3. Detailed Analysis (2-3 paragraphs)
+4. Conclusions & Recommendations
+5. Sources Used
+
+Write in a clear, professional tone. Do not hallucinate — only use the
+information provided in the research findings."""
+
+
+def writer_node(state: ResearchState) -> dict:
     """
+    LangGraph node: drafts a research report from search_results.
+    Returns: {'draft_report': str}
+    """
+    if state.get("error"):
+        return {}
 
-    report = llm.predict(prompt)
+    results = state.get("search_results") or []
+    combined = "\n\n---\n\n".join(results) if results else "No search results available."
 
-    logger.info("Report generated")
-    return report
+    logger.info("[Writer] Drafting report from %d result chunk(s)", len(results))
+
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(
+            content=(
+                f"Research query: {state['query']}\n\n"
+                f"Research plan followed:\n{state.get('plan', 'N/A')}\n\n"
+                f"Gathered findings:\n{combined}"
+            )
+        ),
+    ]
+
+    try:
+        response = _llm.invoke(messages)
+        draft = response.content
+        logger.info("[Writer] Draft created (%d chars)", len(draft))
+        return {"draft_report": draft}
+    except Exception as exc:
+        logger.error("[Writer] Failed: %s", exc)
+        return {"error": f"Writer failed: {exc}"}
