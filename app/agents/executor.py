@@ -1,10 +1,5 @@
 """
 Executor Agent — runs web searches according to the plan and stores results.
-
-Interview note: The executor uses LangChain's create_react_agent (ReAct loop)
-so it can decide how many searches to run and when to stop — this is the
-"agentic" part that interviewers look for.  We bind tools explicitly so the
-LLM can call them via tool-use rather than just listing them in a prompt.
 """
 
 import logging

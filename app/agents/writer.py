@@ -1,9 +1,5 @@
 """
 Writer Agent — synthesises search results into a structured draft report.
-
-Interview note: The writer uses a simple LLM call (no tool loop needed here)
-with a well-crafted system prompt.  Keeping agents single-responsibility
-is a design principle interviewers love to see.
 """
 
 import logging

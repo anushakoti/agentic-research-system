@@ -1,10 +1,5 @@
 """
 Reviewer Agent — quality-gates the draft and returns the final report.
-
-Interview note: Having a separate Reviewer demonstrates understanding of
-multi-agent patterns: each agent has a distinct role and can veto/improve
-the pipeline output.  The reviewer also sets 'reviewed_report' which is
-the terminal field the API returns.
 """
 
 import logging

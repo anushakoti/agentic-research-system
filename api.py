@@ -1,14 +1,5 @@
 """
 FastAPI entry point for the Agentic Research System.
-
-Interview note: Important improvements over the original:
-  - LangSmith tracing is initialised here via environment variables
-    (LANGCHAIN_TRACING_V2, LANGCHAIN_API_KEY, LANGCHAIN_PROJECT)
-    No manual trace IDs needed — LangSmith captures the full graph run.
-  - Pydantic response model makes the contract explicit for the interviewer.
-  - HTTPException on validation so the caller gets a proper 422/400,
-    not an unhandled 500.
-  - Lifespan event confirms env vars on startup (catches config errors early).
 """
 
 import logging

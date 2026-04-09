@@ -1,9 +1,5 @@
 """
 Tool definitions used by the Executor agent.
-
-Interview note: Using @tool decorator from LangChain is the idiomatic way
-to define tools — it auto-generates the schema the LLM uses for tool-calling.
-Tavily is the recommended search tool for LangChain agentic apps.
 """
 
 import logging

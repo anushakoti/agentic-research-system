@@ -1,11 +1,5 @@
 """
 LangGraph workflow — wires the four agents into a directed graph.
-
-Interview note: Key things to show here:
-  - StateGraph with typed state (not a bare dict)
-  - Conditional edges for error-handling (shows real-world thinking)
-  - LangSmith tracing is enabled via environment variables — zero extra code
-  - The compiled graph is exported so api.py can invoke it cleanly
 """
 
 import logging

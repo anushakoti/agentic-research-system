@@ -1,8 +1,5 @@
 """
 Shared state for the LangGraph multi-agent research workflow.
-
-Interview note: Using TypedDict keeps the state schema explicit and
-easy to reason about — every agent reads/writes clearly named fields.
 """
 
 from typing import List, Optional

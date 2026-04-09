@@ -1,9 +1,5 @@
 """
 Planner Agent — breaks a research query into an ordered plan.
-
-Interview note: Each agent is a plain function (node) that takes ResearchState
-and returns a partial state dict.  LangGraph merges the returned dict into
-the running state automatically — no manual copying required.
 """
 
 import logging
