@@ -57,7 +57,7 @@ agentic-research-system/
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/your-username/agentic-research-system.git
+git clone https://github.com/anushakoti/agentic-research-system.git
 cd agentic-research-system
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
@@ -231,8 +231,4 @@ workflow.add_edge("reviewer", END)
 **Switch LLM provider:**
 Replace `ChatOpenAI(...)` with any LangChain-compatible chat model, e.g. `ChatAnthropic`, `ChatGoogleGenerativeAI`, etc.
 
----
 
-## 📄 License
-
-MIT
